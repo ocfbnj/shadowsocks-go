@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/ocfbnj/shadowsocks-go/crypto/shadow"
 	"github.com/ocfbnj/shadowsocks-go/socks5"
@@ -70,7 +73,6 @@ func tcpRemote(remotePort, password string) {
 
 		go func(c net.Conn) {
 			defer c.Close()
-
 			erc := shadow.NewEncryptedConn(c, []byte(password))
 
 			addr, err := socks5.ReadTargetAddress(erc)
@@ -91,14 +93,18 @@ func tcpRemote(remotePort, password string) {
 	}
 }
 
-func proxy(a io.ReadWriter, b io.ReadWriter) {
+func proxy(a net.Conn, b net.Conn) {
 	var wg sync.WaitGroup
 
-	ioCopy := func(w io.Writer, r io.Reader) {
+	ioCopy := func(w net.Conn, r net.Conn) {
 		defer wg.Done()
 
-		if _, err := io.Copy(w, r); err != nil {
-			log.Println(err)
+		_, err := io.Copy(w, r)
+
+		w.SetReadDeadline(time.Now().Add(time.Second * 3))
+
+		if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
+			log.Print(err)
 		}
 	}
 
